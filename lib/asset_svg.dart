@@ -8,11 +8,11 @@
 library r_dart_library;
 
 import 'dart:async';
-import 'dart:ui' as ui show Image, Picture;
-import 'dart:ui';
+import 'dart:ui' as ui show PictureRecorder, Canvas, Picture;
+
 import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter/services.dart' show rootBundle;
+import 'package:flutter/widgets.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 class AssetSvg extends ImageProvider<AssetSvg> {
@@ -28,7 +28,7 @@ class AssetSvg extends ImageProvider<AssetSvg> {
   }
 
   @override
-  ImageStreamCompleter load(AssetSvg key, nil) {
+  ImageStreamCompleter loadImage(AssetSvg key, nil) {
     return OneFrameImageStreamCompleter(
       _loadAsync(key),
     );
@@ -36,36 +36,38 @@ class AssetSvg extends ImageProvider<AssetSvg> {
 
   Future<ImageInfo> _loadAsync(AssetSvg key) async {
     assert(key == this);
-
-    var rawSvg = await rootBundle.loadString(asset);
-    final DrawableRoot svgRoot = await svg.fromSvgString(rawSvg, rawSvg);
-    final scale = window.devicePixelRatio;
-    final ui.Picture picture = svgRoot.toPicture(
-      size: Size(
-        width.toDouble() * scale,
-        height.toDouble() * scale,
-      ),
-      clipToViewBox: false,
+    var rawSvg = await rootBundle.loadString(key.asset);
+    final pictureInfo = await vg.loadPicture(
+      SvgStringLoader(rawSvg),
+      null,
+      clipViewbox: false,
     );
-    var imageW = (width * scale).toInt();
-    var imageH = (height * scale).toInt();
-    final ui.Image image = await picture.toImage(imageW, imageH);
+
+    final ui.PictureRecorder recorder = ui.PictureRecorder();
+
+    ui.Canvas(recorder)
+      ..scale(key.width / pictureInfo.size.width, key.height / pictureInfo.size.height)
+      ..drawPicture(pictureInfo.picture);
+
+    final ui.Picture scaledPicture = recorder.endRecording();
+
+    final image = await scaledPicture.toImage(key.width.toInt(), key.height.toInt());
 
     return ImageInfo(
       image: image,
-      scale: scale,
+      scale: 1.0,
     );
   }
 
   @override
-  bool operator ==(dynamic other) {
+  bool operator ==(Object other) {
     if (other.runtimeType != runtimeType) return false;
-    final AssetSvg typedOther = other;
+    final typedOther = other as AssetSvg;
     return asset == typedOther.asset && width == typedOther.width && height == typedOther.height;
   }
 
   @override
-  int get hashCode => hashValues(asset.hashCode, width, height, 1.0);
+  int get hashCode => Object.hash(asset.hashCode, width, height, 1.0);
 
   @override
   String toString() => '$runtimeType(${describeIdentity(asset)}, scale: 1.0)';
